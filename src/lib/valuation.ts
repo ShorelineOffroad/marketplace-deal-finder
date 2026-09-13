@@ -1,15 +1,31 @@
-// Known power tool brands, used to group listings into meaningful comparables.
+// Known brands per category, used to group listings into meaningful comparables.
 // Grouping by category alone is too coarse — a $160 Milwaukee tool and a $1 "tools nail
 // guns etc" listing aren't comparable items even though they're both "power_tools".
-const KNOWN_BRANDS = [
-  "milwaukee", "dewalt", "makita", "bauer", "ryobi", "bosch", "craftsman",
-  "ridgid", "ego", "kobalt", "hart", "black+decker", "black & decker",
-  "metabo", "skil", "porter-cable", "ozito", "festool",
-];
+// Scoped per category (rather than one global list) since brand vocabularies don't
+// overlap between tools/furniture/ski gear, and keeps each list easy to reason about
+// as more categories get added.
+const BRANDS_BY_CATEGORY: Record<string, string[]> = {
+  power_tools: [
+    "milwaukee", "dewalt", "makita", "bauer", "ryobi", "bosch", "craftsman",
+    "ridgid", "ego", "kobalt", "hart", "black+decker", "black & decker",
+    "metabo", "skil", "porter-cable", "ozito", "festool",
+  ],
+  furniture: [
+    "ikea", "ashley", "la-z-boy", "lazy boy", "pottery barn", "west elm",
+    "crate and barrel", "crate & barrel", "wayfair", "structube", "urban barn",
+    "el ran", "palliser",
+  ],
+  ski_snowboard: [
+    "burton", "salomon", "rossignol", "atomic", "k2", "head", "nordica",
+    "volkl", "völkl", "fischer", "dc", "ride", "gnu", "armada", "line",
+    "north face", "patagonia", "arc'teryx", "arcteryx",
+  ],
+};
 
-export function detectBrand(title: string): string | null {
+export function detectBrand(category: string, title: string): string | null {
+  const brands = BRANDS_BY_CATEGORY[category] ?? [];
   const lower = title.toLowerCase();
-  return KNOWN_BRANDS.find((brand) => lower.includes(brand)) ?? null;
+  return brands.find((brand) => lower.includes(brand)) ?? null;
 }
 
 // Below this, a group's price spread is too noisy to compare against meaningfully.
@@ -35,7 +51,7 @@ export function computeComparableScores(
   const groups = new Map<string, ScorableListing[]>();
   for (const listing of listings) {
     if (listing.price == null) continue;
-    const brand = detectBrand(listing.title) ?? "unbranded";
+    const brand = detectBrand(listing.category, listing.title) ?? "unbranded";
     const groupKey = `${listing.category}::${brand}`;
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey)!.push(listing);

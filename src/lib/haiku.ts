@@ -43,7 +43,11 @@ export async function evaluateListing(params: {
       "listings that aren't actually usable items in this category (toys, accessories, " +
       "unrelated items, yard sale grab-bags) — mark those as not a good deal regardless " +
       "of price. When no description is given, be more conservative, since there's less " +
-      "to verify what's actually included.",
+      "to verify what's actually included. Asking prices of $0-$5 are usually a " +
+      "placeholder or negotiation-starter, not the real transactable price (a common " +
+      "Marketplace pattern for bulk lots or 'make an offer' listings) — do not treat " +
+      "them as a literal 90%+ discount off your estimate; mark these as not a good deal " +
+      "unless the description explicitly confirms that price is genuinely final.",
     messages: [{ role: "user", content: lines.join("\n") }],
     output_config: {
       format: zodOutputFormat(ValuationSchema),
