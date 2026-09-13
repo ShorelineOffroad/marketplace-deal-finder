@@ -76,14 +76,9 @@ export default async function Home() {
                 )}
                 <div className="flex flex-1 flex-col gap-1">
                   <div className="flex items-start justify-between gap-2">
-                    <a
-                      href={deal.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
-                    >
+                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
                       {deal.title}
-                    </a>
+                    </span>
                     <span className="shrink-0 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-400">
                       {discountPercent(deal.price, deal.llm_estimated_value)}% under
                     </span>
@@ -96,6 +91,14 @@ export default async function Home() {
                   <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-500">
                     {deal.llm_reasoning}
                   </p>
+                  <a
+                    href={deal.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex w-fit items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    Open in Facebook →
+                  </a>
                 </div>
               </li>
             ))}
