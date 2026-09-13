@@ -30,3 +30,8 @@ create index if not exists listings_category_price_idx on listings (category, pr
 
 -- Speeds up the dashboard query (flagged deals, most underpriced first)
 create index if not exists listings_flagged_idx on listings (is_flagged, flagged_at desc) where is_flagged = true;
+
+-- Locked down with no policies: only the service_role key (used server-side by the
+-- scrape route and dashboard) can access this table. The publishable key, if it were
+-- ever exposed client-side, gets zero rows rather than full read/write access.
+alter table listings enable row level security;
