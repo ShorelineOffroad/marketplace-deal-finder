@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { scrapeFacebookMarketplace } from "@/lib/apify";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { computeComparableScores } from "@/lib/valuation";
+import { computeComparableScores, FLAG_PERCENTILE_THRESHOLD } from "@/lib/valuation";
+import { evaluateListing } from "@/lib/haiku";
 
 // Apify's scrape call can take a while; default Vercel function timeout is too short.
 export const maxDuration = 60;
@@ -12,6 +13,10 @@ export const maxDuration = 60;
 const SEARCHES = [{ category: "power_tools", query: "power tools" }];
 
 const RESULTS_PER_SEARCH = 30;
+
+// Safety valve: caps how many Haiku calls run per invocation, protecting against
+// runaway duration/cost if a lot of listings suddenly clear the comparable filter.
+const MAX_LLM_EVALUATIONS_PER_RUN = 20;
 
 interface ApifyListingItem {
   id?: string;
@@ -80,5 +85,50 @@ export async function GET(request: NextRequest) {
     )
   );
 
-  return Response.json({ ok: true, scraped, scored: scores.size });
+  // Send listings that clear the free comparable filter (and haven't been evaluated
+  // before) to Claude Haiku for a real value estimate. Capped per run as a safety valve.
+  const candidateIds = Array.from(scores.entries())
+    .filter(([, score]) => score <= FLAG_PERCENTILE_THRESHOLD)
+    .map(([id]) => id);
+
+  let evaluated = 0;
+  let flagged = 0;
+
+  if (candidateIds.length > 0) {
+    const { data: candidates, error: candidatesError } = await supabase
+      .from("listings")
+      .select("id, title, price, currency, category")
+      .in("id", candidateIds)
+      .is("llm_estimated_value", null)
+      .limit(MAX_LLM_EVALUATIONS_PER_RUN);
+    if (candidatesError) throw candidatesError;
+
+    for (const listing of candidates ?? []) {
+      if (listing.price == null) continue;
+
+      const result = await evaluateListing({
+        title: listing.title,
+        price: listing.price,
+        currency: listing.currency,
+        category: listing.category,
+      });
+      if (!result) continue;
+
+      const { error: updateError } = await supabase
+        .from("listings")
+        .update({
+          llm_estimated_value: result.estimated_value,
+          llm_reasoning: result.reasoning,
+          is_flagged: result.is_good_deal,
+          flagged_at: result.is_good_deal ? new Date().toISOString() : null,
+        })
+        .eq("id", listing.id);
+      if (updateError) throw updateError;
+
+      evaluated++;
+      if (result.is_good_deal) flagged++;
+    }
+  }
+
+  return Response.json({ ok: true, scraped, scored: scores.size, evaluated, flagged });
 }
