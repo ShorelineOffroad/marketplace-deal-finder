@@ -7,6 +7,8 @@ create table if not exists listings (
   category text not null,                 -- e.g. "power_tools"
   title text not null,
   description text,
+  condition text,
+  is_sold boolean not null default false,
   price numeric,
   currency text default 'CAD',
   url text not null,

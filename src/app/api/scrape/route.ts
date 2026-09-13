@@ -18,13 +18,18 @@ const RESULTS_PER_SEARCH = 30;
 // runaway duration/cost if a lot of listings suddenly clear the comparable filter.
 const MAX_LLM_EVALUATIONS_PER_RUN = 20;
 
+// Shape returned when includeListingDetails is true — entirely different field names
+// from the plain search-results mode (e.g. listingTitle vs. marketplace_listing_title).
 interface ApifyListingItem {
   id?: string;
-  listingUrl?: string;
-  marketplace_listing_title?: string;
-  listing_price?: { amount?: string };
-  primary_listing_photo?: { photo_image_url?: string };
-  location?: { reverse_geocode?: { city?: string; state?: string } };
+  itemUrl?: string;
+  listingTitle?: string;
+  listingPrice?: { amount?: string; currency?: string };
+  description?: { text?: string };
+  condition?: string;
+  isSold?: boolean;
+  primaryListingPhoto?: { photo_image_url?: string };
+  locationText?: { text?: string };
 }
 
 export async function GET(request: NextRequest) {
@@ -44,19 +49,29 @@ export async function GET(request: NextRequest) {
     );
 
     const rows = items
-      .filter((item) => item.id && item.marketplace_listing_title && item.listing_price?.amount)
-      .map((item) => ({
-        external_id: item.id!,
-        category,
-        title: item.marketplace_listing_title!,
-        price: parseFloat(item.listing_price!.amount!),
-        currency: "CAD",
-        url: item.listingUrl ?? `https://www.facebook.com/marketplace/item/${item.id}`,
-        image_url: item.primary_listing_photo?.photo_image_url ?? null,
-        location_city: item.location?.reverse_geocode?.city ?? null,
-        location_state: item.location?.reverse_geocode?.state ?? null,
-        last_seen_at: new Date().toISOString(),
-      }));
+      .filter((item) => item.id && item.listingTitle && item.listingPrice?.amount)
+      .map((item) => {
+        // locationText is a single "City, Region" string in this response mode.
+        const [locationCity, locationState] = (item.locationText?.text ?? "")
+          .split(",")
+          .map((part) => part.trim());
+
+        return {
+          external_id: item.id!,
+          category,
+          title: item.listingTitle!,
+          description: item.description?.text ?? null,
+          condition: item.condition ?? null,
+          is_sold: item.isSold ?? false,
+          price: parseFloat(item.listingPrice!.amount!),
+          currency: item.listingPrice!.currency ?? "CAD",
+          url: item.itemUrl ?? `https://www.facebook.com/marketplace/item/${item.id}`,
+          image_url: item.primaryListingPhoto?.photo_image_url ?? null,
+          location_city: locationCity || null,
+          location_state: locationState || null,
+          last_seen_at: new Date().toISOString(),
+        };
+      });
 
     if (rows.length > 0) {
       const { error } = await supabase
@@ -97,9 +112,10 @@ export async function GET(request: NextRequest) {
   if (candidateIds.length > 0) {
     const { data: candidates, error: candidatesError } = await supabase
       .from("listings")
-      .select("id, title, price, currency, category")
+      .select("id, title, description, condition, price, currency, category")
       .in("id", candidateIds)
       .is("llm_estimated_value", null)
+      .eq("is_sold", false)
       .limit(MAX_LLM_EVALUATIONS_PER_RUN);
     if (candidatesError) throw candidatesError;
 
@@ -108,6 +124,8 @@ export async function GET(request: NextRequest) {
 
       const result = await evaluateListing({
         title: listing.title,
+        description: listing.description,
+        condition: listing.condition,
         price: listing.price,
         currency: listing.currency,
         category: listing.category,

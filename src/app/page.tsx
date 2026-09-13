@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 interface FlaggedListing {
   id: number;
   title: string;
+  condition: string | null;
   price: number;
   currency: string;
   category: string;
@@ -24,9 +25,10 @@ async function getFlaggedDeals(): Promise<FlaggedListing[]> {
   const { data, error } = await supabase
     .from("listings")
     .select(
-      "id, title, price, currency, category, url, image_url, location_city, llm_estimated_value, llm_reasoning, flagged_at"
+      "id, title, condition, price, currency, category, url, image_url, location_city, llm_estimated_value, llm_reasoning, flagged_at"
     )
     .eq("is_flagged", true)
+    .eq("is_sold", false)
     .order("flagged_at", { ascending: false });
 
   if (error) throw error;
@@ -86,6 +88,7 @@ export default async function Home() {
                   <p className="text-sm text-zinc-600 dark:text-zinc-400">
                     Asking <strong>${deal.price}</strong> {deal.currency} · est. value{" "}
                     <strong>${deal.llm_estimated_value}</strong>
+                    {deal.condition ? ` · ${deal.condition}` : ""}
                     {deal.location_city ? ` · ${deal.location_city}` : ""}
                   </p>
                   <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-500">
