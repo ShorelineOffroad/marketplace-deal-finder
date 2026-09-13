@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { scrapeFacebookMarketplace } from "@/lib/apify";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { computeComparableScores } from "@/lib/valuation";
 
 // Apify's scrape call can take a while; default Vercel function timeout is too short.
 export const maxDuration = 60;
@@ -62,5 +63,22 @@ export async function GET(request: NextRequest) {
     scraped[category] = rows.length;
   }
 
-  return Response.json({ ok: true, scraped });
+  // Re-score every stored listing in the touched categories, not just this batch —
+  // as more comparables accumulate over time, past listings can newly clear (or fall
+  // out of) the group-size threshold. Cheap at our current volume (tens of rows/category).
+  const categories = SEARCHES.map((s) => s.category);
+  const { data: allListings, error: fetchError } = await supabase
+    .from("listings")
+    .select("id, category, title, price")
+    .in("category", categories);
+  if (fetchError) throw fetchError;
+
+  const scores = computeComparableScores(allListings ?? []);
+  await Promise.all(
+    Array.from(scores.entries()).map(([id, comparable_score]) =>
+      supabase.from("listings").update({ comparable_score }).eq("id", id)
+    )
+  );
+
+  return Response.json({ ok: true, scraped, scored: scores.size });
 }
